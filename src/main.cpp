@@ -180,8 +180,8 @@ void loop() {
     atomic_button_data.store(button_data);
   }
 
-  ornibibot_parameter.pitch = map(atomic_y_data.load(), 250, 740, 45, -45);
-  ornibibot_parameter.roll = map(atomic_x_data.load(), 280, 810, -45, 45);
+  ornibibot_parameter.pitch = map(atomic_y_data.load(), 160, 900, 45, -45);
+  ornibibot_parameter.roll = map(atomic_x_data.load(), 150, 925, -45, 45);
 
 
   if(M5.BtnA.isPressed()){
