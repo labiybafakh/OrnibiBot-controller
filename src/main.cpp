@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <M5Stack.h>
+// #include <M5Unified.h>
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -99,13 +100,10 @@ void displayTask(void * parameter) {
         M5.Lcd.fillRect(250, 30, 60, 20, TFT_BLACK);
     }
 
-
     M5.Lcd.setCursor(10, 60);
-
+    M5.Lcd.printf("Bat: %d %    ", M5.Power.getBatteryLevel());
+   
     double frequency_ = ornibibot_parameter.frequency.load() * 0.1f;
-
-
-
     M5.Lcd.setCursor(10, 120);
     M5.Lcd.printf("Frequency: %.1f   ", frequency_);
 
@@ -114,6 +112,7 @@ void displayTask(void * parameter) {
 
     M5.Lcd.setCursor(10, 180);
     M5.Lcd.printf("Pitch: %d deg    ", ornibibot_parameter.pitch.load());
+
 
     vTaskDelay(5 / portTICK_PERIOD_MS);
   }
@@ -138,7 +137,7 @@ void udpTask(void * parameter) {
 
 void setup() {
   M5.begin();
-  M5.Speaker.mute();  // Issue of noisy sound
+  // M5.Speaker.mute();  // Issue of noisy sound
   M5.Power.begin();
   M5.Lcd.clear();
   M5.Lcd.setTextSize(2);
@@ -180,8 +179,8 @@ void loop() {
     atomic_button_data.store(button_data);
   }
 
-  ornibibot_parameter.pitch = map(atomic_y_data.load(), 160, 900, 45, -45);
-  ornibibot_parameter.roll = map(atomic_x_data.load(), 150, 925, -45, 45);
+  ornibibot_parameter.pitch = map(atomic_y_data.load(), 160, 900, 10, -10);
+  ornibibot_parameter.roll = map(atomic_x_data.load(), 150, 925, -35, 35);
 
 
   if(M5.BtnA.isPressed()){
@@ -189,12 +188,16 @@ void loop() {
     delay(100);  
   } 
   else if(M5.BtnB.isPressed()) {
-    if(ornibibot_parameter.frequency.load()>=5) ornibibot_parameter.frequency -= 5;
+    if(ornibibot_parameter.frequency > 5) ornibibot_parameter.frequency -=5;
     delay(100);
   }
   else if(M5.BtnC.isPressed()){
-    if(ornibibot_parameter.frequency.load()<50) ornibibot_parameter.frequency += 5;
+    if(ornibibot_parameter.frequency < 50)
+    ornibibot_parameter.frequency  +=5;
     delay(100);
+  }
+  else if(atomic_button_data.load() == 0){
+    ornibibot_parameter.frequency = 35;
   }
 
   delay(50);
