@@ -21,6 +21,7 @@ struct ornibibot_param{
   std::atomic<uint8_t> frequency;
   std::atomic<int8_t> roll;
   std::atomic<int8_t> pitch;
+  std::atomic<bool> auto_mode;
 };
 
 // Atomic variables for inter-core communication
@@ -102,6 +103,18 @@ void displayTask(void * parameter) {
 
     M5.Lcd.setCursor(10, 60);
     M5.Lcd.printf("Bat: %d %    ", M5.Power.getBatteryLevel());
+
+    if(ornibibot_parameter.auto_mode.load()){
+      M5.Lcd.setCursor(10, 90);
+      M5.Lcd.printf("Mode: Auto     ");
+    }
+    else{
+      M5.Lcd.setCursor(10, 90);
+      M5.Lcd.printf("Mode: Manual   ");
+    }
+
+    M5.Lcd.setCursor(10, 60);
+    M5.Lcd.printf("Bat: %d %    ", M5.Power.getBatteryLevel());
    
     double frequency_ = ornibibot_parameter.frequency.load() * 0.1f;
     M5.Lcd.setCursor(10, 120);
@@ -121,17 +134,62 @@ void displayTask(void * parameter) {
 void udpTask(void * parameter) {
   while (true) {
 
-    uint8_t buffer[3];
+    uint8_t buffer[4];
 
     buffer[0] = (uint8_t)ornibibot_parameter.frequency;
     buffer[1] = (uint8_t)ornibibot_parameter.roll;
     buffer[2] = (uint8_t)ornibibot_parameter.pitch;
+    buffer[3] = static_cast<uint8_t>(ornibibot_parameter.auto_mode.load());
     
     udp.beginPacket(udpAddress, udpPort);
     udp.write(buffer, sizeof(buffer));
     udp.endPacket();
 
     vTaskDelay(5 / portTICK_PERIOD_MS);
+  }
+}
+
+void buttonTask(void * parameter) {
+  
+  while (true) {
+    M5.update();
+
+    Wire.requestFrom(FACE_JOY_ADDR, 5);
+    if (Wire.available()) {
+      uint8_t y_data_L = Wire.read();
+      uint8_t y_data_H = Wire.read();
+      uint8_t x_data_L = Wire.read();
+      uint8_t x_data_H = Wire.read();
+      uint8_t button_data = Wire.read();
+
+      atomic_x_data.store(x_data_H << 8 | x_data_L);
+      atomic_y_data.store(y_data_H << 8 | y_data_L);
+      atomic_button_data.store(button_data);
+    }
+
+    ornibibot_parameter.pitch = map(atomic_y_data.load(), 160, 900, 10, -10);
+    ornibibot_parameter.roll = map(atomic_x_data.load(), 150, 925, -35, 35);
+
+
+    if(M5.BtnA.isPressed()){
+      ornibibot_parameter.frequency = 0; 
+      ornibibot_parameter.auto_mode = false;
+      delay(100);  
+    } 
+    else if(M5.BtnB.isPressed()) {
+      if(ornibibot_parameter.frequency > 5)
+      ornibibot_parameter.frequency  -=5;
+      delay(100);
+    }
+    else if(M5.BtnC.isPressed()){
+      ornibibot_parameter.auto_mode = true;
+      delay(100);
+    }
+    else if(atomic_button_data.load() == 0){
+      ornibibot_parameter.frequency = 45;
+    }
+
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
@@ -161,44 +219,11 @@ void setup() {
   // Start tasks on different cores
   xTaskCreatePinnedToCore(displayTask, "DisplayTask", 4096, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(udpTask, "UDPTask", 4096, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(buttonTask, "ButtonTask", 4096, NULL, 1, NULL, 1);
+
 }
 
 void loop() {
-  M5.update();
 
-  Wire.requestFrom(FACE_JOY_ADDR, 5);
-  if (Wire.available()) {
-    uint8_t y_data_L = Wire.read();
-    uint8_t y_data_H = Wire.read();
-    uint8_t x_data_L = Wire.read();
-    uint8_t x_data_H = Wire.read();
-    uint8_t button_data = Wire.read();
-
-    atomic_x_data.store(x_data_H << 8 | x_data_L);
-    atomic_y_data.store(y_data_H << 8 | y_data_L);
-    atomic_button_data.store(button_data);
-  }
-
-  ornibibot_parameter.pitch = map(atomic_y_data.load(), 160, 900, 10, -10);
-  ornibibot_parameter.roll = map(atomic_x_data.load(), 150, 925, -35, 35);
-
-
-  if(M5.BtnA.isPressed()){
-    ornibibot_parameter.frequency = 0; 
-    delay(100);  
-  } 
-  else if(M5.BtnB.isPressed()) {
-    if(ornibibot_parameter.frequency > 5) ornibibot_parameter.frequency -=5;
-    delay(100);
-  }
-  else if(M5.BtnC.isPressed()){
-    if(ornibibot_parameter.frequency < 50)
-    ornibibot_parameter.frequency  +=5;
-    delay(100);
-  }
-  else if(atomic_button_data.load() == 0){
-    ornibibot_parameter.frequency = 35;
-  }
-
-  delay(50);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
